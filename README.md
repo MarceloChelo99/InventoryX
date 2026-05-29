@@ -20,10 +20,10 @@ Three layers, each independently testable:
 
    **`find_g` gating (`Config.GATE_FIND_G`)** — the legacy code solved
    `T1·T2·L = 1` (logit gate kept in the order-sizing root-find); the brief
-   specifies `T1·T2 = 1` (gate dropped, since the router already decided the
+   proposed `T1·T2 = 1` (gate dropped, since the router already decided the
    SKU is flow-regime). These differ for low-demand SKUs near `L_CENTER`:
-   the gated version orders fewer units. **Default is `False` (brief
-   behavior); set `True` to restore the original tire-shop sizing.**
+   the gated version orders fewer units. **Default is `True` — the original
+   tire-shop sizing; set `False` for the brief's ungated mode.**
 
 2. **`inventoryx/entities.py` + `inventoryx/pipeline.py`** — domain objects.
    - `Vendor` owns lead-time behavior and shock state. Correlated supply

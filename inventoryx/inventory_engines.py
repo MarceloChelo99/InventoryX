@@ -56,12 +56,12 @@ class Config:
     # Root-finder
     G_UPPER_BOUND: float = 1e6
 
-    # find_g gating. The legacy code solved T1*T2*L = 1 (logit gate KEPT in
-    # the root-find). The brief specifies T1*T2 = 1 (L dropped, because the
-    # router already decided the SKU is flow-regime). These give different
-    # order quantities for low-demand SKUs near d ~ L_CENTER. Default follows
-    # the brief; set True to restore the original tire-shop behavior.
-    GATE_FIND_G: bool = False
+    # find_g gating. The legacy tire-shop code solved T1*T2*L = 1 (logit gate
+    # KEPT in the root-find); the brief proposed T1*T2 = 1 (L dropped, because
+    # the router already decided the SKU is flow-regime). These give different
+    # order quantities for low-demand SKUs near d ~ L_CENTER. Default KEEPS the
+    # gate on (original behavior); set False for the brief's ungated sizing.
+    GATE_FIND_G: bool = True
 
 
 DEFAULT_CONFIG = Config()
@@ -373,13 +373,13 @@ class OrderingEngine(ABC):
 
 
 class FlowEngine(OrderingEngine):
-    """Suggests an order quantity by solving T1(g) * T2(g) == 1 for g.
+    """Suggests an order quantity by root-finding the flow balance for g.
 
-    L is DROPPED from the root-find by default (Config.GATE_FIND_G=False):
-    the router already decided this SKU is in the flow regime, so re-gating
-    at decision time would distort the math near the d ~ L_CENTER boundary.
-    Set Config.GATE_FIND_G=True to restore the legacy behavior, which solved
-    T1*T2*L == 1 and therefore ordered fewer units for low-demand SKUs.
+    By default (Config.GATE_FIND_G=True) this matches the original tire-shop
+    behavior: solve T1(g) * T2(g) * L == 1, keeping the logit demand gate, so
+    low-demand SKUs near d ~ L_CENTER are ordered more conservatively.
+    Set Config.GATE_FIND_G=False for the brief's ungated sizing (T1*T2 == 1),
+    which reasons that the router has already gated the SKU into flow regime.
     """
 
     def find_g(

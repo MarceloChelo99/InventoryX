@@ -66,16 +66,18 @@ def test_routing_low_event_fallback():
 # --- 1.6 #3 -----------------------------------------------------------------
 
 def test_find_g_sits_on_balance():
-    """find_g result satisfies T1*T2 == 1 (within tolerance) and is >= 0."""
+    """find_g result zeroes the flow balance (gate-aware) and is >= 0."""
     engine = FlowEngine()
     stats = SKUStats(weekly_demand=20.0, n_events=20, p_bar=1.0, z_bar=3.0)
     lt = LeadTimeProfile(mean_lead_days=14.0)
     g = engine.find_g(stats, lt, on_order=0.0)
     assert g >= 0.0
-    t1, t2, _ = _flow_terms(
+    t1, t2, l_gate = _flow_terms(
         d=stats.weekly_demand, q=g, a=lt.mean_lead_days, s=0.0, cfg=DEFAULT_CONFIG
     )
-    assert t1 * t2 == pytest.approx(1.0, abs=1e-6)
+    # Default keeps the logit gate on; assert the contract the engine solves.
+    gate = l_gate if DEFAULT_CONFIG.GATE_FIND_G else 1.0
+    assert t1 * t2 * gate == pytest.approx(1.0, abs=1e-6)
 
 
 # --- 1.6 #4 -----------------------------------------------------------------
@@ -212,8 +214,8 @@ def test_raid_items_empty():
 # --- GATE_FIND_G flag (legacy vs brief order sizing) -----------------------
 
 def test_gate_find_g_orders_fewer_for_low_demand():
-    """Legacy behavior (gate ON) solves T1*T2*L=1; for a low-demand SKU near
-    L_CENTER that yields a SMALLER order than the brief default (gate OFF)."""
+    """Legacy/default behavior (gate ON) solves T1*T2*L=1; for a low-demand SKU
+    near L_CENTER that yields a SMALLER order than the ungated mode (gate OFF)."""
     stats = SKUStats(weekly_demand=4.0, n_events=20)  # d == L_CENTER -> L=0.5
     lt = LeadTimeProfile(mean_lead_days=14.0)
 
