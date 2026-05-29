@@ -53,6 +53,18 @@ Three layers, each independently testable:
    - `metrics.py` — per-SKU + regime-split stockout / holding / fill-rate.
    - `scenario.py` — a 200-SKU, 5-vendor, 104-week default scenario.
 
+4. **`inventoryx/services/`** — the production scoring path (real data, not
+   the harness). Runs the *same* validated engines on a company's append-only
+   history.
+   - `forecaster.py` — `Forecaster`: turns timestamped `SaleEvent`s into
+     `SKUStats` via the **same** `SKUStats.from_daily_sales` the sim uses, so
+     the engines get identical inputs in both worlds (a parity test pins this).
+     Also exposes the design doc's weighted-MA `predict()` daily rate.
+   - `sources.py` — `InventoryDataSource` protocol + an `InMemorySource` stub.
+     The future SQLite layer is just another implementation of this seam.
+   - `scoring_service.py` — `ScoringService`: fetch a SKU's history + state,
+     call `Router.recommend`, and expose `reorder_list` / `overstock_list`.
+
 ### Truth-isolation caveat (important)
 
 This sim is **Job 2**: validates that the routed engines behave correctly
@@ -124,6 +136,28 @@ rec = router.recommend(
 # rec.engine       which engine produced the quantity
 # rec.diagnostics  formula intermediates + routing rule
 ```
+
+Or let `ScoringService` do the wiring from raw, append-only history:
+
+```python
+from datetime import date
+from inventoryx import ScoringService, InMemorySource
+
+src = InMemorySource()
+src.add_sale("TIRE-205", quantity=8, occurred_at=date(2026, 5, 28))
+# ... more SaleEvents ...
+src.set_stock_state("TIRE-205", on_hand=12, on_order=0, safety_stock=10)
+src.add_lead_observation("TIRE-205", lead_days=14)
+
+svc = ScoringService(src)
+rec = svc.score_sku("TIRE-205", as_of=date(2026, 5, 29))
+
+for hot in svc.reorder_list(as_of=date(2026, 5, 29)):
+    print(hot.sku_id, hot.recommendation.action, hot.recommendation.quantity)
+```
+
+`InMemorySource` is a stub; swap in a SQLite-backed `InventoryDataSource`
+later without touching `ScoringService`.
 
 ## Constants worth knowing
 

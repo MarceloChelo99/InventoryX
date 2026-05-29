@@ -15,6 +15,16 @@ from inventoryx.inventory_engines import (
     SKUStats,
     classify_action,
 )
+from inventoryx.services import (
+    Forecaster,
+    InMemorySource,
+    InventoryDataSource,
+    LeadTimeObservation,
+    SaleEvent,
+    ScoredSku,
+    ScoringService,
+    StockState,
+)
 
 __all__ = [
     "Action",
@@ -30,4 +40,13 @@ __all__ = [
     "Router",
     "SKUStats",
     "classify_action",
+    # Production scoring path
+    "Forecaster",
+    "ScoringService",
+    "ScoredSku",
+    "InMemorySource",
+    "InventoryDataSource",
+    "LeadTimeObservation",
+    "SaleEvent",
+    "StockState",
 ]
