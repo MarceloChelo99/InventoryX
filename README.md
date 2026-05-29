@@ -65,6 +65,19 @@ Three layers, each independently testable:
    - `scoring_service.py` — `ScoringService`: fetch a SKU's history + state,
      call `Router.recommend`, and expose `reorder_list` / `overstock_list`.
 
+5. **`inventoryx/db/`** — SQLite/SQLAlchemy persistence (the design doc's data
+   model). The drop-in for the data-source seam above.
+   - `models.py` — the six tables: `Company`, `Supplier`, `Sku`, `SaleEvent`,
+     `StockSnapshot`, `PurchaseOrder`. `lead_time_days` / `safety_stock` are
+     nullable and cascade SKU → supplier → company at score time.
+   - `source.py` — `SqlInventoryDataSource`: implements `InventoryDataSource`
+     by reading the tables and returning the same dataclasses scoring already
+     consumes. A test asserts it scores **identically** to `InMemorySource` on
+     the same data.
+   - `repository.py` — write-side ingestion helpers (the seam the future
+     `POST /sales`, `/stock/snapshot`, `/purchase-orders` will call).
+   - `migrations/` — Alembic. `alembic upgrade head` builds the schema.
+
 ### Truth-isolation caveat (important)
 
 This sim is **Job 2**: validates that the routed engines behave correctly
@@ -87,7 +100,40 @@ python3 -m venv .venv
 .venv/bin/pytest
 ```
 
-All 39 tests should pass.
+All 56 tests should pass.
+
+## Set up the database
+
+```bash
+# Create the schema (defaults to sqlite:///inventoryx.db).
+alembic upgrade head
+
+# Point at another database without editing alembic.ini:
+INVENTORYX_DATABASE_URL=sqlite:///prod.db alembic upgrade head
+```
+
+Then score real data — same `ScoringService`, just a SQL-backed source:
+
+```python
+from datetime import date
+from inventoryx.db import make_engine, make_session_factory, Repository, SqlInventoryDataSource
+from inventoryx.services import ScoringService
+
+engine = make_engine("sqlite:///inventoryx.db")
+Session = make_session_factory(engine)
+
+with Session() as s:
+    repo = Repository(s)
+    co = repo.create_company("Acme Tires")
+    sku = repo.create_sku(co, code="TIRE-205", name="205/55R16", safety_stock=10)
+    repo.record_sale(sku, quantity=8, occurred_at=date(2026, 5, 28))
+    repo.record_snapshot(sku, on_hand=12, on_order=0, observed_at=date(2026, 5, 29))
+    s.commit()
+
+    svc = ScoringService(SqlInventoryDataSource(s, company_id=co.id))
+    for hot in svc.reorder_list(as_of=date(2026, 5, 29)):
+        print(hot.sku_id, hot.recommendation.action, hot.recommendation.quantity)
+```
 
 ## Run the default scenario
 
