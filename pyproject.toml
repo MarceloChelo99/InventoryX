@@ -1,0 +1,23 @@
+[project]
+name = "inventoryx"
+version = "0.1.0"
+description = "Order-health scoring and discrete-event inventory simulation for storable-goods distributors."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.11",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["inventoryx*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
