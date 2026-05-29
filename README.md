@@ -74,9 +74,13 @@ Three layers, each independently testable:
      by reading the tables and returning the same dataclasses scoring already
      consumes. A test asserts it scores **identically** to `InMemorySource` on
      the same data.
-   - `repository.py` — write-side ingestion helpers (the seam the future
-     `POST /sales`, `/stock/snapshot`, `/purchase-orders` will call).
+   - `repository.py` — write-side ingestion helpers (the seam the REST
+     `POST /sales`, `/stock/snapshot`, `/purchase-orders` call).
    - `migrations/` — Alembic. `alembic upgrade head` builds the schema.
+
+6. **`inventoryx/api/`** — FastAPI REST surface. A thin wrapper: ingestion
+   writes through `Repository`, insights read through `ScoringService`, and no
+   inventory math lives here. See [Run the REST API](#run-the-rest-api).
 
 ### Truth-isolation caveat (important)
 
@@ -100,7 +104,7 @@ python3 -m venv .venv
 .venv/bin/pytest
 ```
 
-All 56 tests should pass.
+All 66 tests should pass.
 
 ## Set up the database
 
@@ -133,6 +137,42 @@ with Session() as s:
     svc = ScoringService(SqlInventoryDataSource(s, company_id=co.id))
     for hot in svc.reorder_list(as_of=date(2026, 5, 29)):
         print(hot.sku_id, hot.recommendation.action, hot.recommendation.quantity)
+```
+
+## Run the REST API
+
+```bash
+# Defaults to sqlite:///inventoryx.db; override with INVENTORYX_DATABASE_URL.
+inventoryx-api            # serves on 127.0.0.1:8000
+# Interactive docs at http://127.0.0.1:8000/docs
+```
+
+`inventoryx/api/` is a thin FastAPI layer over the existing services — no
+inventory math lives there. Ingestion writes through `Repository`; insights
+read through `ScoringService`. In single-company (local) mode the `company_id`
+is inferred; pass `?company_id=` once there's more than one.
+
+| Method & path | Purpose |
+|---|---|
+| `POST /companies`, `/suppliers`, `/skus` | Set up the catalog |
+| `POST /sales` | Bulk-ingest sale events |
+| `POST /stock/snapshot` | Bulk-ingest stock snapshots |
+| `POST /purchase-orders` | Record POs |
+| `PATCH /purchase-orders/{id}/receive` | Mark a PO received (yields a lead time) |
+| `GET /skus` | Every SKU with its current recommendation + position |
+| `GET /skus/{code}/score` | Detailed score + formula intermediates |
+| `GET /skus/{code}/history` | Raw sales + snapshots |
+| `GET /insights/reorder` | SKUs to order, most urgent first |
+| `GET /insights/overstock` | SKUs with capital tied up |
+
+```bash
+curl -X POST localhost:8000/companies -H 'content-type: application/json' \
+  -d '{"name":"Acme Tires","default_lead_time_days":14}'
+curl -X POST localhost:8000/skus -H 'content-type: application/json' \
+  -d '{"code":"TIRE-205","name":"205/55R16","safety_stock":10}'
+curl -X POST localhost:8000/sales -H 'content-type: application/json' \
+  -d '[{"sku_code":"TIRE-205","quantity":8,"occurred_at":"2026-05-28"}]'
+curl localhost:8000/insights/reorder
 ```
 
 ## Run the default scenario
